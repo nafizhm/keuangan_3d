@@ -77,10 +77,14 @@ class FinanceController extends Controller
     public function store(Request $request)
     {
         abort_unless($request->user()->role === 'pengelola', 403);
+        $this->normalizeMoney($request);
         $data = $request->validate(['date' => 'required|date|before_or_equal:today', 'type' => 'required|in:pemasukan,pengeluaran',
             'category' => 'required|in:Penjualan cetak 3D,Modal usaha,Filamen & resin,Peralatan & perawatan,Listrik & operasional,Lainnya',
-            'description' => 'required|string|max:255', 'amount' => 'required|numeric|min:1|max:9999999999999',
+            'description' => 'required|string|max:255', 'amount' => 'required|integer|min:1|max:9999999999999',
+            'discount' => 'nullable|integer|min:0|lte:amount',
             'attachment' => 'required_if:type,pengeluaran|nullable|file|mimes:jpg,jpeg,png,pdf|max:5120']);
+        $data['discount'] = $data['discount'] ?? 0;
+        $data['amount'] -= $data['discount'];
         $path = $request->hasFile('attachment') ? $request->file('attachment')->store('receipts', 'local') : null;
         $data['attachment'] = $path;
         $data['user_id'] = $request->user()->id;
@@ -98,15 +102,19 @@ class FinanceController extends Controller
     public function update(Request $request, Transaction $transaction)
     {
         abort_unless($request->user()->role === 'pengelola', 403);
+        $this->normalizeMoney($request);
         $hasReceipt = $transaction->attachment && Storage::disk('local')->exists($transaction->attachment);
         $data = $request->validate([
             'date' => 'required|date|before_or_equal:today',
             'type' => 'required|in:pemasukan,pengeluaran',
             'category' => 'required|in:Penjualan cetak 3D,Modal usaha,Filamen & resin,Peralatan & perawatan,Listrik & operasional,Lainnya',
             'description' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:1|max:9999999999999',
+            'amount' => 'required|integer|min:1|max:9999999999999',
+            'discount' => 'nullable|integer|min:0|lte:amount',
             'attachment' => ($hasReceipt ? '' : 'required_if:type,pengeluaran|').'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
         ]);
+        $data['discount'] = $data['discount'] ?? 0;
+        $data['amount'] -= $data['discount'];
         unset($data['attachment']);
         $oldPath = $transaction->attachment;
         $newPath = null;
@@ -127,6 +135,16 @@ class FinanceController extends Controller
         }
 
         return redirect()->route('transactions')->with('success', 'Transaksi berhasil diperbarui.');
+    }
+
+    private function normalizeMoney(Request $request): void
+    {
+        foreach (['amount', 'discount'] as $field) {
+            $value = $request->input($field);
+            if (is_string($value) && preg_match('/^[0-9]{1,3}(\.[0-9]{3})+$/D', $value)) {
+                $request->merge([$field => str_replace('.', '', $value)]);
+            }
+        }
     }
 
     public function destroy(Request $request, Transaction $transaction)

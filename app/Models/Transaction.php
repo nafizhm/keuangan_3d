@@ -10,6 +10,6 @@ class Transaction extends Model
 
     protected function casts(): array
     {
-        return ['date' => 'date', 'amount' => 'decimal:2'];
+        return ['date' => 'date', 'amount' => 'decimal:2', 'discount' => 'decimal:2'];
     }
 }
