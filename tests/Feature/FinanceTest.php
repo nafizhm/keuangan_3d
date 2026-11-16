@@ -24,9 +24,9 @@ class FinanceTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_expense_requires_receipt_and_receipt_is_private(): void
+    public function test_expense_requires_public_receipt_and_preview_route_requires_login(): void
     {
-        Storage::fake('local');
+        Storage::fake('public');
         $user = User::factory()->create();
         $user->role = 'pengelola';
         $user->save();
@@ -35,7 +35,7 @@ class FinanceTest extends TestCase
         $data['attachment'] = UploadedFile::fake()->create('bukti.pdf', 20, 'application/pdf');
         $this->post('/transaksi', $data)->assertRedirect('/transaksi');
         $transaction = Transaction::firstOrFail();
-        Storage::disk('local')->assertExists($transaction->attachment);
+        Storage::disk('public')->assertExists($transaction->attachment);
         $this->get('/transaksi')->assertOk()->assertSee('View lampiran');
         $this->get('/transaksi/'.$transaction->id.'/lampiran')->assertOk();
         $this->post('/logout');
@@ -51,11 +51,11 @@ class FinanceTest extends TestCase
 
     public function test_manager_can_update_and_delete_transaction_with_receipt(): void
     {
-        Storage::fake('local');
+        Storage::fake('public');
         $user = User::factory()->create();
         $user->role = 'pengelola';
         $user->save();
-        Storage::disk('local')->put('receipts/old.pdf', 'old receipt');
+        Storage::disk('public')->put('receipts/old.pdf', 'old receipt');
         $transaction = Transaction::create([
             'user_id' => $user->id, 'date' => now()->format('Y-m-d'),
             'type' => 'pengeluaran', 'category' => 'Filamen & resin',
@@ -66,16 +66,16 @@ class FinanceTest extends TestCase
             'category' => 'Filamen & resin', 'description' => 'Filamen baru', 'amount' => 200000];
         $this->actingAs($user)->put('/transaksi/'.$transaction->id, $data)->assertRedirect('/transaksi');
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'description' => 'Filamen baru', 'amount' => 200000, 'attachment' => 'receipts/old.pdf']);
-        Storage::disk('local')->assertExists('receipts/old.pdf');
+        Storage::disk('public')->assertExists('receipts/old.pdf');
         $data['attachment'] = UploadedFile::fake()->create('baru.pdf', 20, 'application/pdf');
         $this->put('/transaksi/'.$transaction->id, $data)->assertRedirect('/transaksi');
         $newPath = $transaction->fresh()->attachment;
-        Storage::disk('local')->assertMissing('receipts/old.pdf');
-        Storage::disk('local')->assertExists($newPath);
+        Storage::disk('public')->assertMissing('receipts/old.pdf');
+        Storage::disk('public')->assertExists($newPath);
         $this->get('/transaksi')->assertOk()->assertSee('data-edit', false)->assertSee('delete-modal');
         $this->delete('/transaksi/'.$transaction->id)->assertRedirect('/transaksi');
         $this->assertDatabaseMissing('transactions', ['id' => $transaction->id]);
-        Storage::disk('local')->assertMissing($newPath);
+        Storage::disk('public')->assertMissing($newPath);
         $this->get('/dashboard')->assertOk()->assertSee('Rp 0');
     }
 

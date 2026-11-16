@@ -85,14 +85,14 @@ class FinanceController extends Controller
             'attachment' => 'required_if:type,pengeluaran|nullable|file|mimes:jpg,jpeg,png,pdf|max:5120']);
         $data['discount'] = $data['discount'] ?? 0;
         $data['amount'] -= $data['discount'];
-        $path = $request->hasFile('attachment') ? $request->file('attachment')->store('receipts', 'local') : null;
+        $path = $request->hasFile('attachment') ? $request->file('attachment')->store('receipts', 'public') : null;
         $data['attachment'] = $path;
         $data['user_id'] = $request->user()->id;
         try {
             Transaction::create($data);
         } catch (\Throwable $e) {
             if ($path) {
-                Storage::disk('local')->delete($path);
+                Storage::disk('public')->delete($path);
             } throw $e;
         }
 
@@ -103,7 +103,7 @@ class FinanceController extends Controller
     {
         abort_unless($request->user()->role === 'pengelola', 403);
         $this->normalizeMoney($request);
-        $hasReceipt = $transaction->attachment && Storage::disk('local')->exists($transaction->attachment);
+        $hasReceipt = $transaction->attachment && Storage::disk('public')->exists($transaction->attachment);
         $data = $request->validate([
             'date' => 'required|date|before_or_equal:today',
             'type' => 'required|in:pemasukan,pengeluaran',
@@ -119,19 +119,19 @@ class FinanceController extends Controller
         $oldPath = $transaction->attachment;
         $newPath = null;
         if ($request->hasFile('attachment')) {
-            $newPath = $request->file('attachment')->store('receipts', 'local');
+            $newPath = $request->file('attachment')->store('receipts', 'public');
             $data['attachment'] = $newPath;
         }
         try {
             $transaction->update($data);
         } catch (\Throwable $e) {
             if ($newPath) {
-                Storage::disk('local')->delete($newPath);
+                Storage::disk('public')->delete($newPath);
             }
             throw $e;
         }
         if ($newPath && $oldPath) {
-            Storage::disk('local')->delete($oldPath);
+            Storage::disk('public')->delete($oldPath);
         }
 
         return redirect()->route('transactions')->with('success', 'Transaksi berhasil diperbarui.');
@@ -153,7 +153,7 @@ class FinanceController extends Controller
         $path = $transaction->attachment;
         $transaction->delete();
         if ($path) {
-            Storage::disk('local')->delete($path);
+            Storage::disk('public')->delete($path);
         }
 
         return redirect()->route('transactions')->with('success', 'Transaksi berhasil dihapus.');
@@ -161,9 +161,9 @@ class FinanceController extends Controller
 
     public function attachment(Transaction $transaction)
     {
-        abort_unless($transaction->attachment && Storage::disk('local')->exists($transaction->attachment), 404);
+        abort_unless($transaction->attachment && Storage::disk('public')->exists($transaction->attachment), 404);
 
-        return response()->file(Storage::disk('local')->path($transaction->attachment), ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store']);
+        return response()->file(Storage::disk('public')->path($transaction->attachment), ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store']);
     }
 
     public function logout(Request $request)
